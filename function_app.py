@@ -2,38 +2,43 @@ import os
 import subprocess
 import logging
 import uuid
-from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient, BlobClient
 import azure.functions as func
 import shutil
+from urllib.parse import urlparse
 
 app = func.FunctionApp()
 
-@app.blob_trigger(arg_name="myblob", path="videos/{name}.mp4",
-                  connection="highwayfootagestorage_STORAGE") 
-def split_video(myblob: func.InputStream):
-    logging.info(f"📥 Blob trigger ενεργοποιήθηκε για: {myblob.name} ({myblob.length} bytes)")
-    print(f"📥 Blob trigger ενεργοποιήθηκε για: {myblob.name} ({myblob.length} bytes)", flush=True)
+@app.event_grid_trigger(arg_name="event")
+def split_video(event: func.EventGridEvent):
+    # Take URL of Blob
+    data = event.get_json()
+    blob_url = data["url"]
+    logging.info(f"Event received for: {blob_url}")
+    print(f"Event received for: {blob_url}", flush=True)
+
+    # Analyze URL for container + blob name
+    parsed = urlparse(blob_url)
+    path_parts = parsed.path.lstrip('/').split('/')
+    container_name = path_parts[0]
+    blob_name = '/'.join(path_parts[1:])
 
     # Storage connection
     connection_string = os.environ["AzureWebJobsStorage"]
 
-    # Δημιουργία προσωρινών φακέλων
+    # Create temporary files
     tmp_dir = f"/tmp/{uuid.uuid4()}"
     os.makedirs(tmp_dir, exist_ok=True)
 
-    # Αποθήκευση του βίντεο τοπικά (με χρήση SDK)
+    # Save the video locally using SDK
     local_input_path = os.path.join(tmp_dir, "input.mp4")
 
-    # Από το όνομα του blob βρίσκουμε το path (π.χ. videos/filename.mp4)
-    blob_name = myblob.name  # π.χ. "videos/myvideo.mp4"
-
-    from azure.storage.blob import BlobClient
+    # Download blob (on-demand)
     blob_client = BlobClient.from_connection_string(
         conn_str=connection_string,
-        container_name="videos",
+        container_name=container_name,
         blob_name=blob_name
     )
-
     with open(local_input_path, "wb") as f:
         download_stream = blob_client.download_blob()
         f.write(download_stream.readall())
