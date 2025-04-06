@@ -17,23 +17,23 @@ def split_video(event: func.EventGridEvent):
     logging.info(f"Event received for: {blob_url}")
     print(f"Event received for: {blob_url}", flush=True)
 
-    # Analyze URL for container + blob name
+    # Analyze URL for Container + Blob Name
     parsed = urlparse(blob_url)
     path_parts = parsed.path.lstrip('/').split('/')
     container_name = path_parts[0]
     blob_name = '/'.join(path_parts[1:])
 
-    # Storage connection
+    # Storage Connection
     connection_string = os.environ["AzureWebJobsStorage"]
 
-    # Create temporary files
+    # Create Temporary Files
     tmp_dir = f"/tmp/{uuid.uuid4()}"
     os.makedirs(tmp_dir, exist_ok=True)
 
-    # Save the video locally using SDK
+    # Save Video Locally Using SDK
     local_input_path = os.path.join(tmp_dir, "input.mp4")
 
-    # Download blob (on-demand)
+    # Download Blob (On-Demand)
     blob_client = BlobClient.from_connection_string(
         conn_str=connection_string,
         container_name=container_name,
@@ -44,21 +44,21 @@ def split_video(event: func.EventGridEvent):
         f.write(download_stream.readall())
 
 
-    # Φάκελος για τα segments
+    # Temp Folder of Segments
     segments_folder = os.path.join(tmp_dir, "segments")
     os.makedirs(segments_folder, exist_ok=True)
 
-    # Επιλογή ffmpeg path ανάλογα με το περιβάλλον
+    # Choose ffmpeg Path Depending on Local Env or Portal Env
     if os.getenv("AZURE_FUNCTIONS_ENVIRONMENT") == "Development":
         ffmpeg_path = "ffmpeg"
     else:
         ffmpeg_path = os.path.join(os.path.dirname(__file__), "bin", "ffmpeg", "ffmpeg")
 
-    # Ρύθμιση ονόματος για τα output segments
+    # Output Segments Name Creation
     output_pattern = os.path.join(segments_folder, "segment_%03d.mp4")
     segment_duration = 120  # 2 λεπτά
 
-    # ffmpeg command
+    # ffmpeg Command
     cmd = [
         ffmpeg_path,
         "-i", local_input_path,
@@ -70,7 +70,7 @@ def split_video(event: func.EventGridEvent):
         output_pattern
     ]
 
-    # Εκτέλεση ffmpeg
+    # ffmpeg Execution
     try:
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         logging.info(result.stdout.decode())
@@ -81,21 +81,21 @@ def split_video(event: func.EventGridEvent):
             print("❌ ffmpeg failed.", flush=True)
             return
         else:
-            logging.info("✅ Το βίντεο κόπηκε επιτυχώς σε segments.")
-            print("✅ Το βίντεο κόπηκε επιτυχώς σε segments.", flush=True)
+            logging.info("✅ Video split into segments successfully.")
+            print("✅ Video split into segments successfully.", flush=True)
     except Exception as e:
-        logging.error(f"❌ Σφάλμα κατά την εκτέλεση του ffmpeg: {e}")
-        print(f"❌ Σφάλμα κατά την εκτέλεση του ffmpeg: {e}", flush=True)
+        logging.error(f"❌ Error while executing ffmpeg: {e}")
+        print(f"❌ Error while executing ffmpeg: {e}", flush=True)
         return
 
-    # Έλεγχος αν δημιουργήθηκαν αρχεία
+    # Check if Files are Created
     if not os.listdir(segments_folder):
-        logging.error("❌ Κανένα segment δεν δημιουργήθηκε από το ffmpeg.")
-        print("❌ Κανένα segment δεν δημιουργήθηκε από το ffmpeg.", flush=True)
+        logging.error("❌ No segment was created from ffmpeg.")
+        print("❌ No segment was created from ffmpeg.", flush=True)
         return
 
 
-    # Upload των segments
+    # Upload Segments
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     container_client = blob_service_client.get_container_client("processed-videos")
 
@@ -105,15 +105,15 @@ def split_video(event: func.EventGridEvent):
 
         with open(segment_path, "rb") as data:
             container_client.upload_blob(name=blob_name, data=data, overwrite=True)
-            logging.info(f"📤 Ανεβάστηκε: processed-videos/{blob_name}")
-            print(f"📤 Ανεβάστηκε: processed-videos/{blob_name}", flush=True)
+            logging.info(f"📤 Uploaded: processed-videos/{blob_name}")
+            print(f"📤 Uploaded: processed-videos/{blob_name}", flush=True)
 
-    # Καθαρισμός: Διαγραφή όλων των προσωρινών αρχείων και φακέλων
+    # Delete temp files/folders
     try:
         if os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir)
-            logging.info(f"🧹 Διαγράφηκε προσωρινός φάκελος: {tmp_dir}")
-            print(f"🧹 Διαγράφηκε προσωρινός φάκελος: {tmp_dir}", flush=True)
+            logging.info(f"🧹 Temp folder deleted: {tmp_dir}")
+            print(f"🧹 Temp folder deleted: {tmp_dir}", flush=True)
     except Exception as cleanup_error:
-        logging.warning(f"⚠️ Αποτυχία καθαρισμού: {cleanup_error}")
-        print(f"⚠️ Αποτυχία καθαρισμού: {cleanup_error}", flush=True)
+        logging.warning(f"⚠️ Failed to delete: {cleanup_error}")
+        print(f"⚠️ Failed to delete: {cleanup_error}", flush=True)
