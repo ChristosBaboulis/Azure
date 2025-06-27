@@ -1,6 +1,6 @@
 # Azure Function - Video Segment Splitter
 
-This Azure Function is the first component of the Vehicle Speed Calculation project.  
+This Azure Function is the **_first_** component of the **_Vehicle Speed Calculation_** project.  
 
 This repo contains an Azure Function that splits uploaded videos into 2-minute segments using the ffmpeg library. It is designed to be triggered automatically when a video is uploaded to a specific Azure Blob Storage container.
 
